@@ -111,8 +111,12 @@ int main(int argc, char *argv[]) {
 
     l = lcm();
 
-    if(checkIfRunable()<=1)
+    if(checkIfRunable()<=1) {
         runSim();
+        for (int i = 0; i < ph.num; ++i) {
+            sem_post(&sem[i]);
+        }
+    }
     else
         printf("This is unable to be scheduled\n");
 
@@ -172,16 +176,17 @@ int runSim() {
         if(top_s != -1) {
             // printf("%d: ", ph.p[stack[top_s]].current);
             printf("%d:", t);
+            fflush(stdout);
             sem_post(&sem[stack[top_s]]);
             sem_wait(mainSem);
-            fflush(stdout);
             if (ph.p[stack[top_s]].current == 0) --top_s;
         }
         else {
-            printf("NULL ");
+            printf("%d: __ ", t);
+            fflush(stdout);
         }
         // if (ph.p[stack[top_s]].current == 0) --top_s;
-
+        if(t%6 == 0) printf("\n");
     }
 
     running = 0;
