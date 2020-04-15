@@ -103,30 +103,27 @@ int main(int argc, char *argv[]) {
     initSem();
 
     tid = malloc(sizeof(pthread_t)*ph.num);
-    for (int i = 0; i < ph.num; ++i) {
-        int* temp = malloc(sizeof(int));
-        *temp = i;
-        pthread_create(&tid[i],NULL,threadFun,temp);
-    }
-
     l = lcm();
 
     if(checkIfRunable()<=1) {
+        for (int i = 0; i < ph.num; ++i) {
+            int* temp = malloc(sizeof(int));
+            *temp = i;
+            pthread_create(&tid[i],NULL,threadFun,temp);
+        }
+
         runSim();
         for (int i = 0; i < ph.num; ++i) {
             sem_post(&sem[i]);
+        }
+
+        for (int i = 0; i < ph.num; ++i) {
+            pthread_join(tid[i],NULL);
         }
     }
     else
         printf("This is unable to be scheduled\n");
 
-
-    for (int i = 0; i < ph.num; ++i) {
-        pthread_join(tid[i],NULL);
-    }
-
-
-    // printProc(&ph);
 
     deleteProcs(&ph);
     free(tid);
@@ -138,25 +135,13 @@ int runSim() {
     int* stack = malloc(sizeof(int)*ph.num);
     int top_s= -1;
 
-    // Adds all processes to a stack in reverse order of importance
-    for(int i = ph.num-1; i > -1; --i) {
-        stack[++top_s] = i;
-    }
-    printf("0:");
-    sem_post(&sem[stack[top_s]]);
-    sem_wait(mainSem);
 
-    // T3 is disappearing!!!
-
-
-    for(int t = 1; t < l; ++t) {
-        // printf("\ncur: %d, ", ph.p[stack[top_s]].current);
+    for(int t = 0; t < l; ++t) {
         for(int i = 0; i < ph.num; ++i) {
             if(t%ph.p[i].period == 0) {
 
                 if(ph.p[i].current == 0) {
                     stack[++top_s] = i;
-                    // printf("new:%s,%d ", ph.p[i].name, top_s);
                     ph.p[i].current = ph.p[i].wcet;
 
                     for(int k = top_s; k > 0; --k) {
@@ -169,12 +154,12 @@ int runSim() {
                 }
                 else {
                     printf("There was an error scheduling\n");
+                    running = 0;
                     return -1;
                 }
             }
         }
         if(top_s != -1) {
-            // printf("%d: ", ph.p[stack[top_s]].current);
             printf("%d:", t);
             fflush(stdout);
             sem_post(&sem[stack[top_s]]);
@@ -185,9 +170,8 @@ int runSim() {
             printf("%d: __ ", t);
             fflush(stdout);
         }
-        // if (ph.p[stack[top_s]].current == 0) --top_s;
-        if(t%6 == 0) printf("\n");
     }
+    printf("\n");
 
     running = 0;
     free(stack);
@@ -228,7 +212,7 @@ proc* createProcess(proc* p, char* name, int wcet, int period) {
     p->name = name;
     p->wcet = wcet;
     p->period = period;
-    p->current = wcet;
+    p->current = 0;
     return p;
 }
 
