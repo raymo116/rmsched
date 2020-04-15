@@ -72,22 +72,31 @@ void createProcs(char*, proc_holder*);
 void printProc(proc_holder*);
 void sortArray(proc_holder*);
 void initSem();
+void runSim();
+int checkArray(int);
+int lcm();
+int max();
 
 // Threading
 sem_t* sem;
+sem_t* mainSem;
 struct proc* p;
-char* fp;
+char* taskSet;
 proc_holder ph;
+int running = 1;
+int nPeriods;
+int lcm;
 
 /*
 The producer/consumer program (prodcon.c) that takes three arguments from the
 command line (no prompting the user from within the program).
 */
 int main(int argc, char *argv[]) {
-    fp = strdup("./testFile.txt");
+    taskSet = strdup("./testFile.txt");
+    nPeriods = 3;
     pthread_t* tid;
 
-    createProcs(fp, &ph);
+    createProcs(taskSet, &ph);
     initSem();
 
     tid = malloc(sizeof(pthread_t)*ph.num);
@@ -96,6 +105,11 @@ int main(int argc, char *argv[]) {
         *temp = i;
         pthread_create(&tid[i],NULL,threadFun,temp);
     }
+    
+    lcm = lcm();
+    
+    runSim();
+    
 
     for (int i = 0; i < ph.num; ++i) {
         pthread_join(tid[i],NULL);
@@ -110,16 +124,40 @@ int main(int argc, char *argv[]) {
     return 0;
 }
 
+void runSim() {
+    int time = 0;
+    
+    for(int i = 0; i < lcm; ++i) {
+        
+        sem_post(&sem[i]);
+        sem_wait(mainSem);   
+        
+    }
+                
+    running = 0;
+}
+
 void *threadFun(void* param) {
     int id = *((int *) param);
-    sem_wait(&sem[id]);
-    printf("%s %d %d\n", ph.p[id].name, ph.p[id].wcet, ph.p[id].period);
+    while(running) {
+        sem_wait(&sem[id]);
+        if(running) {
+            printf("%s ", ph.p[id].name);
+            fflush(stdout);
+            sem_post(mainSem);
+        }
+    }
 
     free(param);
     pthread_exit(0);
 }
 
 void initSem() {
+    mainSem = malloc(sizeof(sem_t));
+    if(sem_init(mainSem,0,1) == -1) {
+            printf("%s\n",strerror(errno));
+    }
+        
     sem = malloc(sizeof(sem_t)*ph.num);
     for (int i = 0; i < ph.num; ++i) {
         if(sem_init(&sem[0],0,0) == -1) {
@@ -211,4 +249,25 @@ void sortArray(proc_holder* ph) {
         }
     }
 
+}
+
+int checkArray(int lcm) {
+    for(int i = 0; i < ph.num; ++i) {
+        if(lcm%(ph.p[i].period != 0)) return 0;
+    }
+    return 1;
+}
+
+int lcm() {
+    int lcm = max();
+    while(checkArray(lcm) != 1) ++lcm;
+    return lcm;
+}
+
+int max() {
+    int max = 0;
+    for(int i = 0; i < ph.num; ++i) {
+        if(ph.p[i].period > max) max = ph.p[i].period;
+    }
+    return max;
 }
