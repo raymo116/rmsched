@@ -1,43 +1,11 @@
-/*
-The idea is to write a C program that simulates a Rate Monotonic (RM) real-scheduler.
-The scheduler will:
-*/
-/*
-    - Create n number of threads
-        - Based upon the tasks defined in the task set file
-*/
-/*
-    - Simulate the scheduling of those threads using posix based semaphores
-        - Each thread will wait in a while loop waiting to acquire the semaphore
-        - Once acquired the thread will print-out just its task name then go wait for the next semaphore post by the scheduler (Only one function should be needed to implement the thread tasks)
-        - The scheduler will release or post a semaphore (so n tasks means n sempahores) based upon the RM scheduling algorithm
-        - A “clock tick” will be simulated through each iteration of the main scheduling loop (i.e. one iteration first clock tick, two iterations, second clock tick,)
-    - Assume all task are periodic and released at time 0.
 
 
+/*
 The RM scheduler program (rmsched.c) that takes three arguments from the command line (no prompting the user from within the program):
     - ./rmsched <nperiods> <task set> <schedule>
         - <nperiods> defines the number of hyperperiods
         - <task set> is a file containing the task set descriptions
         - <scheduler> is a file that contains the actual schedule
-    - The format of the <task set> file is as follows:
-        - T1 2 6
-          T2 3 12
-          T3 6 24
-        - The first column represents the task name
-        - The second column represents the task WCET
-        - The third column represents the task period
-    - The example format of the <schedule> file is as follows:
-        - 0  1  2  3  4  5  6  7  8  9 10  11 12 13 14 15
-          T1 T1 T2 T2 T2 T3 T1 T1 T3 T3 T3 T3 T1 T1 T2 T2
-        - The first row represents the time (only needs to display once at the top of the file)
-        - The second row represents the actual schedule for one hyperperiod
-        - The next hyperperiod should begin on the next row
-    - The main process:
-        - Create the n threads and the n semaphores
-        - Determine which thread to release based upon the RM scheduling algorithm
-        - Check to ensure that the task set is actually schedulable before attempting to create a schedule.
-    - The task thread only has to wait for the appropriate semaphore then print-out its name to the <schedule> file and wait for the next semaphore post.
 */
 
 #define NUMBER 3
@@ -69,11 +37,10 @@ void *threadFun(void*);
 
 proc* createProcess(proc*, char*, int, int);
 void deleteProcs(proc_holder*);
-void createProcs(char*, proc_holder*);
+int createProcs(char*, proc_holder*);
 void printProc(proc_holder*);
-void sortArray(proc_holder*);
 void initSem();
-int runSim();
+int runSim(int);
 int checkArray(int);
 int lcm();
 int max();
@@ -89,15 +56,29 @@ int running = 1;
 int nPeriods;
 int l;
 int active;
+char* scheduler;
+FILE* fptr;
 
 /*
 The producer/consumer program (prodcon.c) that takes three arguments from the
 command line (no prompting the user from within the program).
 */
 int main(int argc, char *argv[]) {
-    taskSet = strdup("./testFile.txt");
-    nPeriods = 3;
     pthread_t* tid;
+
+    // Input
+    if(argc != 4) {
+        printf("Usage: ./rmsched <nperiods> <task set> <schedule>\n");
+        return -1;
+    }
+    else if (atoi(argv[1]) < 1) {
+        printf("Argument %s must be positive\n", argv[1]);
+        return -1;
+    }
+
+    nPeriods = atoi(argv[1]);
+    taskSet = strdup(argv[2]);
+    scheduler = strdup(argv[3]);
 
     createProcs(taskSet, &ph);
     initSem();
@@ -112,7 +93,12 @@ int main(int argc, char *argv[]) {
             pthread_create(&tid[i],NULL,threadFun,temp);
         }
 
-        runSim();
+        if((fptr = fopen(strdup(scheduler), "w+")) == NULL) {
+            printf("You cannot open this file\n");
+            return -1;
+        }
+
+        if(runSim(nPeriods) == -1) remove(scheduler);
         for (int i = 0; i < ph.num; ++i) {
             sem_post(&sem[i]);
         }
@@ -131,47 +117,56 @@ int main(int argc, char *argv[]) {
     return 0;
 }
 
-int runSim() {
+int runSim(int times) {
+
     int* stack = malloc(sizeof(int)*ph.num);
     int top_s= -1;
+    for(int i = 0; i < l; ++i) {
+        fprintf(fptr, "%d  ", i);
+    }
+    fprintf(fptr, "\n");
 
+    while(times-->0) {
+        for(int t = 0; t < l; ++t) {
+            for(int i = 0; i < ph.num; ++i) {
+                if(t%ph.p[i].period == 0) {
 
-    for(int t = 0; t < l; ++t) {
-        for(int i = 0; i < ph.num; ++i) {
-            if(t%ph.p[i].period == 0) {
+                    if(ph.p[i].current == 0) {
+                        stack[++top_s] = i;
+                        ph.p[i].current = ph.p[i].wcet;
 
-                if(ph.p[i].current == 0) {
-                    stack[++top_s] = i;
-                    ph.p[i].current = ph.p[i].wcet;
-
-                    for(int k = top_s; k > 0; --k) {
-                        if(ph.p[stack[k]].period > ph.p[stack[k-1]].period) {
-                            int temp = stack[k-1];
-                            stack[k-1] = stack[k];
-                            stack[k] = temp;
+                        for(int k = top_s; k > 0; --k) {
+                            if(ph.p[stack[k]].period > ph.p[stack[k-1]].period) {
+                                int temp = stack[k-1];
+                                stack[k-1] = stack[k];
+                                stack[k] = temp;
+                            }
                         }
                     }
-                }
-                else {
-                    printf("There was an error scheduling\n");
-                    running = 0;
-                    return -1;
+                    else {
+                        printf("These processes cannot be scheduled\n");
+                        running = 0;
+                        return -1;
+                    }
                 }
             }
+            if(top_s != -1) {
+                // fprintf(fptr, "%d:", t);
+                fflush(stdout);
+                sem_post(&sem[stack[top_s]]);
+                sem_wait(mainSem);
+                if (ph.p[stack[top_s]].current == 0) --top_s;
+            }
+            else {
+                // fprintf(fptr, "%d: __ ", t);
+                fprintf(fptr, "__ ");
+                fflush(stdout);
+            }
         }
-        if(top_s != -1) {
-            printf("%d:", t);
-            fflush(stdout);
-            sem_post(&sem[stack[top_s]]);
-            sem_wait(mainSem);
-            if (ph.p[stack[top_s]].current == 0) --top_s;
-        }
-        else {
-            printf("%d: __ ", t);
-            fflush(stdout);
-        }
+        fprintf(fptr, "\n");
     }
-    printf("\n");
+
+    fclose(fptr);
 
     running = 0;
     free(stack);
@@ -184,7 +179,7 @@ void *threadFun(void* param) {
         sem_wait(&sem[id]);
         if(running) {
             --ph.p[id].current;
-            printf("%s ", ph.p[id].name);
+            fprintf(fptr, "%s ", ph.p[id].name);
             fflush(stdout);
             sem_post(mainSem);
         }
@@ -216,12 +211,12 @@ proc* createProcess(proc* p, char* name, int wcet, int period) {
     return p;
 }
 
-void createProcs(char* fp, proc_holder* ph) {
+int createProcs(char* fp, proc_holder* ph) {
     FILE* fptr;
 
     if((fptr = fopen(strdup(fp), "r+")) == NULL) {
-        printf("No such file\n");
-        exit(1);
+        printf("That file doesn't exist\n");
+        return -1;
     }
 
     char tempName[STR_LENGTH];
@@ -264,7 +259,8 @@ void createProcs(char* fp, proc_holder* ph) {
         }
     }
 
-    sortArray(ph);
+    fclose(fptr);
+    return 0;
 }
 
 void deleteProcs(proc_holder* ph) {
@@ -278,20 +274,6 @@ void printProc(proc_holder* ph) {
     for(int i = 0; i < ph->num; ++i) {
         printf("%s %d %d\n", ph->p[i].name, ph->p[i].wcet, ph->p[i].period);
     }
-}
-
-void sortArray(proc_holder* ph) {
-    proc p;
-    for(int i = 0; i < ph->num; ++i) {
-        for (int k = 0; k < ph->num; ++k) {
-            if(ph->p[i].period < ph->p[k].period) {
-                p = ph->p[i];
-                ph->p[i] = ph->p[k];
-                ph->p[k] = p;
-            }
-        }
-    }
-
 }
 
 int checkArray(int lcm) {
