@@ -1,8 +1,12 @@
 /*
 The idea is to write a C program that simulates a Rate Monotonic (RM) real-scheduler.
 The scheduler will:
+*/
+/*
     - Create n number of threads
         - Based upon the tasks defined in the task set file
+*/
+/*
     - Simulate the scheduling of those threads using posix based semaphores
         - Each thread will wait in a while loop waiting to acquire the semaphore
         - Once acquired the thread will print-out just its task name then go wait for the next semaphore post by the scheduler (Only one function should be needed to implement the thread tasks)
@@ -60,15 +64,17 @@ typedef struct {
     int num;
 } proc_holder;
 
-void *myThread(void*);
+void *threadFun(void*);
 
 proc* createProcess(proc*, char*, int, int);
 void deleteProcs(proc_holder*);
 void createProcs(char*, proc_holder*);
 void printProc(proc_holder*);
+void sortArray(proc_holder*);
+void initSem();
 
 // Threading
-sem_t sem[NUMBER];
+sem_t* sem;
 struct proc* p;
 char* fp;
 proc_holder ph;
@@ -79,18 +85,47 @@ command line (no prompting the user from within the program).
 */
 int main(int argc, char *argv[]) {
     fp = strdup("./testFile.txt");
+    pthread_t* tid;
 
     createProcs(fp, &ph);
+    initSem();
 
-    printProc(&ph);
+    tid = malloc(sizeof(pthread_t)*ph.num);
+    for (int i = 0; i < ph.num; ++i) {
+        int* temp = malloc(sizeof(int));
+        *temp = i;
+        pthread_create(&tid[i],NULL,threadFun,temp);
+    }
+
+    for (int i = 0; i < ph.num; ++i) {
+        pthread_join(tid[i],NULL);
+    }
+
+
+    // printProc(&ph);
 
     deleteProcs(&ph);
+    free(tid);
+    free(sem);
     return 0;
 }
 
-void *myThread(void* param) {
+void *threadFun(void* param) {
+    int id = *((int *) param);
+    sem_wait(&sem[id]);
+    printf("%s %d %d\n", ph.p[id].name, ph.p[id].wcet, ph.p[id].period);
 
+    free(param);
     pthread_exit(0);
+}
+
+void initSem() {
+    sem = malloc(sizeof(sem_t)*ph.num);
+    for (int i = 0; i < ph.num; ++i) {
+        if(sem_init(&sem[0],0,0) == -1) {
+            printf("%s\n",strerror(errno));
+        }
+    }
 }
 
 proc* createProcess(proc* p, char* name, int wcet, int period) {
@@ -147,6 +182,8 @@ void createProcs(char* fp, proc_holder* ph) {
             printf("No match.\n");
         }
     }
+
+    sortArray(ph);
 }
 
 void deleteProcs(proc_holder* ph) {
@@ -160,4 +197,18 @@ void printProc(proc_holder* ph) {
     for(int i = 0; i < ph->num; ++i) {
         printf("%s %d %d\n", ph->p[i].name, ph->p[i].wcet, ph->p[i].period);
     }
+}
+
+void sortArray(proc_holder* ph) {
+    proc p;
+    for(int i = 0; i < ph->num; ++i) {
+        for (int k = 0; k < ph->num; ++k) {
+            if(ph->p[i].period < ph->p[k].period) {
+                p = ph->p[i];
+                ph->p[i] = ph->p[k];
+                ph->p[k] = p;
+            }
+        }
+    }
+
 }
