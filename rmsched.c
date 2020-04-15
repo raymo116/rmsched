@@ -138,18 +138,30 @@ int runSim() {
     for(int i = ph.num-1; i > -1; --i) {
         stack[++top_s] = i;
     }
-
+    printf("0:");
     sem_post(&sem[stack[top_s]]);
     sem_wait(mainSem);
 
+    // T3 is disappearing!!!
+
 
     for(int t = 1; t < l; ++t) {
+        // printf("\ncur: %d, ", ph.p[stack[top_s]].current);
         for(int i = 0; i < ph.num; ++i) {
             if(t%ph.p[i].period == 0) {
 
                 if(ph.p[i].current == 0) {
                     stack[++top_s] = i;
-                    __sync_add_and_fetch(&ph.p[i].current, &ph.p[i].wcet);
+                    // printf("new:%s,%d ", ph.p[i].name, top_s);
+                    ph.p[i].current = ph.p[i].wcet;
+
+                    for(int k = top_s; k > 0; --k) {
+                        if(ph.p[stack[k]].period > ph.p[stack[k-1]].period) {
+                            int temp = stack[k-1];
+                            stack[k-1] = stack[k];
+                            stack[k] = temp;
+                        }
+                    }
                 }
                 else {
                     printf("There was an error scheduling\n");
@@ -158,12 +170,18 @@ int runSim() {
             }
         }
         if(top_s != -1) {
+            // printf("%d: ", ph.p[stack[top_s]].current);
+            printf("%d:", t);
             sem_post(&sem[stack[top_s]]);
             sem_wait(mainSem);
             fflush(stdout);
+            if (ph.p[stack[top_s]].current == 0) --top_s;
         }
+        else {
+            printf("NULL ");
+        }
+        // if (ph.p[stack[top_s]].current == 0) --top_s;
 
-        if (ph.p[stack[top_s]].current == 0) --top_s;
     }
 
     running = 0;
@@ -176,9 +194,9 @@ void *threadFun(void* param) {
     while(running) {
         sem_wait(&sem[id]);
         if(running) {
+            --ph.p[id].current;
             printf("%s ", ph.p[id].name);
             fflush(stdout);
-            __sync_sub_and_fetch(&ph.p[id].current, 1);
             sem_post(mainSem);
         }
     }
