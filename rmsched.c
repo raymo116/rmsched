@@ -57,6 +57,7 @@ typedef struct  {
     char* name;
     int wcet;
     int period;
+    int current;
 } proc;
 
 typedef struct {
@@ -72,10 +73,11 @@ void createProcs(char*, proc_holder*);
 void printProc(proc_holder*);
 void sortArray(proc_holder*);
 void initSem();
-void runSim();
+int runSim();
 int checkArray(int);
 int lcm();
 int max();
+int checkIfRunable();
 
 // Threading
 sem_t* sem;
@@ -85,7 +87,8 @@ char* taskSet;
 proc_holder ph;
 int running = 1;
 int nPeriods;
-int lcm;
+int l;
+int active;
 
 /*
 The producer/consumer program (prodcon.c) that takes three arguments from the
@@ -105,11 +108,14 @@ int main(int argc, char *argv[]) {
         *temp = i;
         pthread_create(&tid[i],NULL,threadFun,temp);
     }
-    
-    lcm = lcm();
-    
-    runSim();
-    
+
+    l = lcm();
+
+    if(checkIfRunable()<=1)
+        runSim();
+    else
+        printf("This is unable to be scheduled\n");
+
 
     for (int i = 0; i < ph.num; ++i) {
         pthread_join(tid[i],NULL);
@@ -124,17 +130,45 @@ int main(int argc, char *argv[]) {
     return 0;
 }
 
-void runSim() {
-    int time = 0;
-    
-    for(int i = 0; i < lcm; ++i) {
-        
-        sem_post(&sem[i]);
-        sem_wait(mainSem);   
-        
+int runSim() {
+    int* stack = malloc(sizeof(int)*ph.num);
+    int top_s= -1;
+
+    // Adds all processes to a stack in reverse order of importance
+    for(int i = ph.num-1; i > -1; --i) {
+        stack[++top_s] = i;
     }
-                
+
+    sem_post(&sem[stack[top_s]]);
+    sem_wait(mainSem);
+
+
+    for(int t = 1; t < l; ++t) {
+        for(int i = 0; i < ph.num; ++i) {
+            if(t%ph.p[i].period == 0) {
+
+                if(ph.p[i].current == 0) {
+                    stack[++top_s] = i;
+                    __sync_add_and_fetch(&ph.p[i].current, &ph.p[i].wcet);
+                }
+                else {
+                    printf("There was an error scheduling\n");
+                    return -1;
+                }
+            }
+        }
+        if(top_s != -1) {
+            sem_post(&sem[stack[top_s]]);
+            sem_wait(mainSem);
+            fflush(stdout);
+        }
+
+        if (ph.p[stack[top_s]].current == 0) --top_s;
+    }
+
     running = 0;
+    free(stack);
+    return 0;
 }
 
 void *threadFun(void* param) {
@@ -144,6 +178,7 @@ void *threadFun(void* param) {
         if(running) {
             printf("%s ", ph.p[id].name);
             fflush(stdout);
+            __sync_sub_and_fetch(&ph.p[id].current, 1);
             sem_post(mainSem);
         }
     }
@@ -154,10 +189,10 @@ void *threadFun(void* param) {
 
 void initSem() {
     mainSem = malloc(sizeof(sem_t));
-    if(sem_init(mainSem,0,1) == -1) {
+    if(sem_init(mainSem,0,0) == -1) {
             printf("%s\n",strerror(errno));
     }
-        
+
     sem = malloc(sizeof(sem_t)*ph.num);
     for (int i = 0; i < ph.num; ++i) {
         if(sem_init(&sem[0],0,0) == -1) {
@@ -170,6 +205,7 @@ proc* createProcess(proc* p, char* name, int wcet, int period) {
     p->name = name;
     p->wcet = wcet;
     p->period = period;
+    p->current = wcet;
     return p;
 }
 
@@ -259,9 +295,9 @@ int checkArray(int lcm) {
 }
 
 int lcm() {
-    int lcm = max();
-    while(checkArray(lcm) != 1) ++lcm;
-    return lcm;
+    int l = max();
+    while(checkArray(l) != 1) ++l;
+    return l;
 }
 
 int max() {
@@ -270,4 +306,12 @@ int max() {
         if(ph.p[i].period > max) max = ph.p[i].period;
     }
     return max;
+}
+
+int checkIfRunable() {
+    int sum = 0;
+    for(int i = 0; i < ph.num; ++i) {
+        sum += ph.p[i].wcet/ph.p[i].period;
+    }
+    return sum;
 }
