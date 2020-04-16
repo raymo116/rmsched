@@ -147,7 +147,7 @@ int main(int argc, char *argv[]) {
             return -1;
         }
 
-        // If the simulation crashes, removes the value in scheduler
+        // If the simulation crashes, removes the schedule file that was created
         if(runSim(nPeriods) == -1) remove(scheduler);
 
         // Join all of the threads
