@@ -1,3 +1,12 @@
+/*
+* @name: rmsched.c
+* @author: Matt Raymond
+* @email: raymo116@mail.chapman.edu
+* @id: 2270559
+* @date: 04/15/2020
+* @version: 1.0
+*/
+
 #define STR_LENGTH 32
 
 #include <unistd.h>
@@ -35,9 +44,6 @@ int createProcs(char*, proc_holder*);
 // Frees a process's memory
 void deleteProcs(proc_holder*);
 
-// // Prints the contents of
-// void printProc(proc_holder*);
-
 // Initializes all of the semaphores
 void initSem();
 
@@ -58,8 +64,10 @@ int checkIfRunable();
 
 // Array of semaphores for processes
 sem_t* sem;
+
 // Semaphore for the main simulation
 sem_t* mainSem;
+
 // An array of procs to store process data in
 struct proc* p;
 
@@ -78,8 +86,6 @@ int nPeriods;
 
 // The lcm of all of the processes
 int l;
-
-// int active;
 
 // A filepath for where the schedule should be saved
 char* scheduler;
@@ -147,7 +153,7 @@ int main(int argc, char *argv[]) {
             return -1;
         }
 
-        // If the simulation crashes, removes the value in scheduler
+        // If the simulation crashes, removes the schedule file that was created
         if(runSim(nPeriods) == -1) remove(scheduler);
 
         // Join all of the threads
@@ -263,9 +269,6 @@ void *threadFun(void* param) {
     // The id of the thread
     int id = *((int *) param);
 
-//sem_wait(&sem[id]);
-	//printf("%d", running);
-
     // While they should be repeating
     while(running) {
         // Block
@@ -274,10 +277,6 @@ void *threadFun(void* param) {
         if(running) {
             // Save their name to a file
 			fprintf(fptr, "%s ", ph.p[id].name);
-
-			//fflush(stdout);
-            //fprintf(fptr, "%s ", ph.p[id].name);
-            //fflush(stdout);
 
             // Post the main function (not "main()")
             sem_post(mainSem);
@@ -389,13 +388,6 @@ void deleteProcs(proc_holder* ph) {
     // Frees the array of procs
     free(ph->p);
 }
-
-// void printProc(proc_holder* ph) {
-// int i;
-//     for(i = 0; i < ph->num; ++i) {
-//         printf("%s %d %d %d\n", ph->p[i].name, ph->p[i].wcet, ph->p[i].period, ph->p[i].current);
-//     }
-// }
 
 // Checks to see if the array is divisible by the given number
 int checkArray(int lcm) {
