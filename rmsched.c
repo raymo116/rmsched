@@ -1,13 +1,3 @@
-
-
-/*
-The RM scheduler program (rmsched.c) that takes three arguments from the command line (no prompting the user from within the program):
-    - ./rmsched <nperiods> <task set> <schedule>
-        - <nperiods> defines the number of hyperperiods
-        - <task set> is a file containing the task set descriptions
-        - <scheduler> is a file that contains the actual schedule
-*/
-
 #define NUMBER 3
 #define STR_LENGTH 32
 
@@ -77,8 +67,8 @@ int main(int argc, char *argv[]) {
     }
 
     nPeriods = atoi(argv[1]);
-    taskSet = strdup(argv[2]);
-    scheduler = strdup(argv[3]);
+    taskSet = argv[2];
+    scheduler = argv[3];
 
     createProcs(taskSet, &ph);
     initSem();
@@ -87,23 +77,24 @@ int main(int argc, char *argv[]) {
     l = lcm();
 
     if(checkIfRunable()<=1) {
-        for (int i = 0; i < ph.num; ++i) {
+int i;
+        for(i = 0; i < ph.num; ++i) {
             int* temp = malloc(sizeof(int));
             *temp = i;
             pthread_create(&tid[i],NULL,threadFun,temp);
         }
 
-        if((fptr = fopen(strdup(scheduler), "w+")) == NULL) {
+        if((fptr = fopen(scheduler, "w+")) == NULL) {
             printf("You cannot open this file\n");
             return -1;
         }
 
         if(runSim(nPeriods) == -1) remove(scheduler);
-        for (int i = 0; i < ph.num; ++i) {
+        for (i = 0; i < ph.num; ++i) {
             sem_post(&sem[i]);
         }
 
-        for (int i = 0; i < ph.num; ++i) {
+        for (i = 0; i < ph.num; ++i) {
             pthread_join(tid[i],NULL);
         }
     }
@@ -121,28 +112,76 @@ int runSim(int times) {
 
     int* stack = malloc(sizeof(int)*ph.num);
     int top_s= -1;
-    for(int i = 0; i < l; ++i) {
-        fprintf(fptr, "%d  ", i);
+   	int j;
+    for(j = 0; j < l; ++j) {
+        fprintf(fptr, "%d  ", j);
     }
     fprintf(fptr, "\n");
 
     while(times-->0) {
-        for(int t = 0; t < l; ++t) {
-            for(int i = 0; i < ph.num; ++i) {
+	int t;
+        for(t = 0; t < l; ++t) {
+int i;
+            for(i = 0; i < ph.num; ++i) {
+		//printf("%s: %d\n", ph.p[i].name, ph.p[i].current);
+
                 if(t%ph.p[i].period == 0) {
 
                     if(ph.p[i].current == 0) {
+			// Add to stack
                         stack[++top_s] = i;
                         ph.p[i].current = ph.p[i].wcet;
 
-                        for(int k = top_s; k > 0; --k) {
-                            if(ph.p[stack[k]].period > ph.p[stack[k-1]].period) {
-                                int temp = stack[k-1];
-                                stack[k-1] = stack[k];
-                                stack[k] = temp;
-                            }
+			//prop down stack
+			int k;
+			for(k = top_s; k > 0; --k) {
+			    if(ph.p[stack[k]].period > ph.p[stack[k-1]].period) {
+				int temp = stack[k];
+                                stack[k] = stack[k-1];
+			        stack[k-1] = temp;
+			    }
                         }
+		    }
+		    else {
+			//printf("nope: %d\n", i);
+            	//printf("These processes cannot be scheduled\n");
+                        //running = 0;
+                        //return -1;
                     }
+			}
+
+
+		}
+		int p;
+		for(p = top_s; p >=0; --p)
+			printf("%s: %d\n", ph.p[stack[p]].name, ph.p[stack[p]].current);
+	    
+
+		if(top_s != -1) {
+			ph.p[stack[top_s]].current--;
+			if(ph.p[stack[top_s]].current == 0) top_s--;
+			//sem_post(&sem[stack[top_s]]);
+		}
+}
+
+/*
+
+            if(top_s != -1) {
+		ph.p[stack[top_s]].current--;
+		printf("%s ", ph.p[stack[top_s]].name);
+                //sem_post(&sem[stack[top_s]]);
+                sem_wait(mainSem);
+		printf(", %d\n", ph.p[stack[top_s]].current);
+                if (ph.p[stack[top_s]].current < 1) --top_s;
+            }
+}
+
+	    int p = 0;
+            for(p = top_s; p >=0; --p)
+		printf("%s: %d\n", ph.p[stack[p]].name, ph.p[stack[p]].period);
+
+/*
+
                     else {
                         printf("These processes cannot be scheduled\n");
                         running = 0;
@@ -150,19 +189,23 @@ int runSim(int times) {
                     }
                 }
             }
+
             if(top_s != -1) {
                 // fprintf(fptr, "%d:", t);
-                fflush(stdout);
+                //fflush(stdout);
+		ph.p[stack[top_s]].current--;
                 sem_post(&sem[stack[top_s]]);
                 sem_wait(mainSem);
-                if (ph.p[stack[top_s]].current == 0) --top_s;
+		printf(", %d\n", ph.p[stack[top_s]].current);
+                if (ph.p[stack[top_s]].current < 1) --top_s;
             }
             else {
                 // fprintf(fptr, "%d: __ ", t);
                 fprintf(fptr, "__ ");
                 fflush(stdout);
             }
-        }
+*/
+        //}
         fprintf(fptr, "\n");
     }
 
@@ -175,15 +218,18 @@ int runSim(int times) {
 
 void *threadFun(void* param) {
     int id = *((int *) param);
-    while(running) {
+
+    //while(running) {
         sem_wait(&sem[id]);
+	printf("proc: %s", ph.p[id].name);
         if(running) {
-            --ph.p[id].current;
+            //--ph.p[id].current;
             fprintf(fptr, "%s ", ph.p[id].name);
             fflush(stdout);
             sem_post(mainSem);
+	
         }
-    }
+    //}
 
     free(param);
     pthread_exit(0);
@@ -196,7 +242,8 @@ void initSem() {
     }
 
     sem = malloc(sizeof(sem_t)*ph.num);
-    for (int i = 0; i < ph.num; ++i) {
+int i;
+    for (i = 0; i < ph.num; ++i) {
         if(sem_init(&sem[0],0,0) == -1) {
             printf("%s\n",strerror(errno));
         }
@@ -214,7 +261,7 @@ proc* createProcess(proc* p, char* name, int wcet, int period) {
 int createProcs(char* fp, proc_holder* ph) {
     FILE* fptr;
 
-    if((fptr = fopen(strdup(fp), "r+")) == NULL) {
+    if((fptr = fopen(fp, "r+")) == NULL) {
         printf("That file doesn't exist\n");
         return -1;
     }
@@ -264,20 +311,23 @@ int createProcs(char* fp, proc_holder* ph) {
 }
 
 void deleteProcs(proc_holder* ph) {
-    for(int i = 0; i < ph->num; ++i) {
+int i;
+    for(i = 0; i < ph->num; ++i) {
         free(ph->p[i].name);
     }
     free(ph->p);
 }
 
 void printProc(proc_holder* ph) {
-    for(int i = 0; i < ph->num; ++i) {
-        printf("%s %d %d\n", ph->p[i].name, ph->p[i].wcet, ph->p[i].period);
+int i;
+    for(i = 0; i < ph->num; ++i) {
+        printf("%s %d %d %d\n", ph->p[i].name, ph->p[i].wcet, ph->p[i].period, ph->p[i].current);
     }
 }
 
 int checkArray(int lcm) {
-    for(int i = 0; i < ph.num; ++i) {
+int i;
+    for(i = 0; i < ph.num; ++i) {
         if(lcm%(ph.p[i].period != 0)) return 0;
     }
     return 1;
@@ -291,7 +341,8 @@ int lcm() {
 
 int max() {
     int max = 0;
-    for(int i = 0; i < ph.num; ++i) {
+int i;
+    for(i = 0; i < ph.num; ++i) {
         if(ph.p[i].period > max) max = ph.p[i].period;
     }
     return max;
@@ -299,7 +350,8 @@ int max() {
 
 int checkIfRunable() {
     int sum = 0;
-    for(int i = 0; i < ph.num; ++i) {
+int i;
+    for(i = 0; i < ph.num; ++i) {
         sum += ph.p[i].wcet/ph.p[i].period;
     }
     return sum;
