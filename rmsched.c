@@ -1,3 +1,12 @@
+/*
+* @name: rmsched.c
+* @author: Matt Raymond
+* @email: raymo116@mail.chapman.edu
+* @id: 2270559
+* @date: 04/15/2020
+* @version: 1.0
+*/
+
 #define STR_LENGTH 32
 
 #include <unistd.h>
