@@ -1,14 +1,11 @@
 #define STR_LENGTH 32
 
 #include <unistd.h>
-#include <sys/types.h>
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <pthread.h>
-#include <string.h>
 #include <semaphore.h>
-#include <string.h>
 
 // A struct to hold all of the data from a process
 typedef struct  {
