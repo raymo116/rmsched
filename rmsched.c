@@ -48,13 +48,13 @@ int l;
 int active;
 char* scheduler;
 FILE* fptr;
+pthread_t* tid;
 
 /*
 The producer/consumer program (prodcon.c) that takes three arguments from the
 command line (no prompting the user from within the program).
 */
 int main(int argc, char *argv[]) {
-    pthread_t* tid;
 
     // Input
     if(argc != 4) {
@@ -90,9 +90,7 @@ int i;
         }
 
         if(runSim(nPeriods) == -1) remove(scheduler);
-        for (i = 0; i < ph.num; ++i) {
-            sem_post(&sem[i]);
-        }
+        
 
         for (i = 0; i < ph.num; ++i) {
             pthread_join(tid[i],NULL);
@@ -114,122 +112,84 @@ int runSim(int times) {
     int top_s= -1;
    	int j;
     for(j = 0; j < l; ++j) {
-        fprintf(fptr, "%d  ", j);
+        printf("%d  ", j);
     }
-    fprintf(fptr, "\n");
+    printf("\n");
 
     while(times-->0) {
 	int t;
         for(t = 0; t < l; ++t) {
 int i;
             for(i = 0; i < ph.num; ++i) {
-		//printf("%s: %d\n", ph.p[i].name, ph.p[i].current);
 
                 if(t%ph.p[i].period == 0) {
 
                     if(ph.p[i].current == 0) {
-			// Add to stack
+						// Add to stack
                         stack[++top_s] = i;
                         ph.p[i].current = ph.p[i].wcet;
 
-			//prop down stack
-			int k;
-			for(k = top_s; k > 0; --k) {
-			    if(ph.p[stack[k]].period > ph.p[stack[k-1]].period) {
-				int temp = stack[k];
-                                stack[k] = stack[k-1];
-			        stack[k-1] = temp;
-			    }
+						//prop down stack
+						int k;
+						for(k = top_s; k > 0; --k) {
+							if(ph.p[stack[k]].period > ph.p[stack[k-1]].period) {
+								int temp = stack[k];
+						        stack[k] = stack[k-1];
+								stack[k-1] = temp;
+			    			}
                         }
-		    }
-		    else {
-			//printf("nope: %d\n", i);
-            	//printf("These processes cannot be scheduled\n");
-                        //running = 0;
-                        //return -1;
-                    }
+		    		}
+		    		else {
+            			printf("These processes cannot be scheduled\n");
+                		running = 0;
+                		return -1;
+                	}
+				}
+
+
 			}
 
-
+			if(top_s != -1) {
+				sem_post(&sem[stack[top_s]]);
+				sem_wait(mainSem);
+				ph.p[stack[top_s]].current--;
+				if(ph.p[stack[top_s]].current == 0) top_s--;
+			}
+			else {
+				printf("__ ");
+			}
 		}
-		int p;
-		for(p = top_s; p >=0; --p)
-			printf("%s: %d\n", ph.p[stack[p]].name, ph.p[stack[p]].current);
-	    
-
-		if(top_s != -1) {
-			ph.p[stack[top_s]].current--;
-			if(ph.p[stack[top_s]].current == 0) top_s--;
-			//sem_post(&sem[stack[top_s]]);
-		}
-}
-
-/*
-
-            if(top_s != -1) {
-		ph.p[stack[top_s]].current--;
-		printf("%s ", ph.p[stack[top_s]].name);
-                //sem_post(&sem[stack[top_s]]);
-                sem_wait(mainSem);
-		printf(", %d\n", ph.p[stack[top_s]].current);
-                if (ph.p[stack[top_s]].current < 1) --top_s;
-            }
-}
-
-	    int p = 0;
-            for(p = top_s; p >=0; --p)
-		printf("%s: %d\n", ph.p[stack[p]].name, ph.p[stack[p]].period);
-
-/*
-
-                    else {
-                        printf("These processes cannot be scheduled\n");
-                        running = 0;
-                        return -1;
-                    }
-                }
-            }
-
-            if(top_s != -1) {
-                // fprintf(fptr, "%d:", t);
-                //fflush(stdout);
-		ph.p[stack[top_s]].current--;
-                sem_post(&sem[stack[top_s]]);
-                sem_wait(mainSem);
-		printf(", %d\n", ph.p[stack[top_s]].current);
-                if (ph.p[stack[top_s]].current < 1) --top_s;
-            }
-            else {
-                // fprintf(fptr, "%d: __ ", t);
-                fprintf(fptr, "__ ");
-                fflush(stdout);
-            }
-*/
-        //}
-        fprintf(fptr, "\n");
+        printf("\n");
     }
 
     fclose(fptr);
+	running = 0;
 
-    running = 0;
+	int i;
+	for (i = 0; i < ph.num; ++i) {
+        sem_post(&sem[i]);
+    }
+
     free(stack);
     return 0;
 }
 
 void *threadFun(void* param) {
     int id = *((int *) param);
+//sem_wait(&sem[id]);
+	//printf("%d", running);
 
-    //while(running) {
+    while(running) {
         sem_wait(&sem[id]);
-	printf("proc: %s", ph.p[id].name);
         if(running) {
-            //--ph.p[id].current;
-            fprintf(fptr, "%s ", ph.p[id].name);
-            fflush(stdout);
+			printf("%s ", ph.p[id].name);
+			fflush(stdout);
+            //fprintf(fptr, "%s ", ph.p[id].name);
+            //fflush(stdout);
             sem_post(mainSem);
-	
         }
-    //}
+	}
+
 
     free(param);
     pthread_exit(0);
@@ -244,7 +204,7 @@ void initSem() {
     sem = malloc(sizeof(sem_t)*ph.num);
 int i;
     for (i = 0; i < ph.num; ++i) {
-        if(sem_init(&sem[0],0,0) == -1) {
+        if(sem_init(&sem[i],0,0) == -1) {
             printf("%s\n",strerror(errno));
         }
     }
