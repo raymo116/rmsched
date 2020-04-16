@@ -50,10 +50,7 @@ char* scheduler;
 FILE* fptr;
 pthread_t* tid;
 
-/*
-The producer/consumer program (prodcon.c) that takes three arguments from the
-command line (no prompting the user from within the program).
-*/
+
 int main(int argc, char *argv[]) {
 
     // Input
@@ -112,9 +109,9 @@ int runSim(int times) {
     int top_s= -1;
    	int j;
     for(j = 0; j < l; ++j) {
-        printf("%d  ", j);
+        fprintf(fptr, "%d  ", j);
     }
-    printf("\n");
+    fprintf(fptr, "\n");
 
     while(times-->0) {
 	int t;
@@ -146,7 +143,6 @@ int i;
                 	}
 				}
 
-
 			}
 
 			if(top_s != -1) {
@@ -156,10 +152,10 @@ int i;
 				if(ph.p[stack[top_s]].current == 0) top_s--;
 			}
 			else {
-				printf("__ ");
+				fprintf(fptr, "__ ");
 			}
 		}
-        printf("\n");
+        fprintf(fptr, "\n");
     }
 
     fclose(fptr);
@@ -182,8 +178,8 @@ void *threadFun(void* param) {
     while(running) {
         sem_wait(&sem[id]);
         if(running) {
-			printf("%s ", ph.p[id].name);
-			fflush(stdout);
+			fprintf(fptr, "%s ", ph.p[id].name);
+			//fflush(stdout);
             //fprintf(fptr, "%s ", ph.p[id].name);
             //fflush(stdout);
             sem_post(mainSem);
